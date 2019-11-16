@@ -81,13 +81,14 @@ private:
 private:
   /* Core Play Commands */
   void play() const {
-    char bw, p[2];
+    std::string bw;
+    char p[2];
     fin_ >> bw >> p;
     ; // TODO
     fout_ << "=\n\n";
   }
   void genmove() const {
-    char bw;
+    std::string bw;
     fin_ >> bw;
     ; // TODO
     fout_ << "=\n\n";
