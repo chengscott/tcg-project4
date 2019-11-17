@@ -83,20 +83,20 @@ private:
     fout_ << "=\n\n";
   }
   void komi() const {
+    // not used
     float komi;
     fin_ >> komi;
-    ; // TODO
     fout_ << "=\n\n";
   }
 
 private:
   /* Core Play Commands */
   void play() {
-    std::string sbw, pos;
+    std::string sbw;
+    Position pos;
     fin_ >> sbw >> pos;
-    size_t p0 = tolower(pos[0]) - 'a';
-    size_t p = (p0 - (p0 > 8)) + (8 - (pos[1] - '1')) * 9;
-    if (board_.place(tolower(sbw[0]) == 'w', p)) {
+    size_t bw = tolower(sbw[0]) == 'w' ? 1 : 0;
+    if (board_.place(bw, static_cast<size_t>(pos))) {
       fout_ << "=\n\n";
     } else {
       fout_ << "? illegal move\n\n";
@@ -108,13 +108,11 @@ private:
   void genmove() {
     std::string sbw;
     fin_ >> sbw;
-    size_t bw = tolower(sbw[0]) == 'w';
+    size_t bw = tolower(sbw[0]) == 'w' ? 1 : 0;
     size_t move = agent_->take_action(board_, bw);
     history_.push_back(board_);
     board_.place(bw, move);
-    size_t p0 = move % 9;
-    fout_ << "= " << char(p0 + (p0 >= 8) + 'A') << char((8 - move / 9) + '1')
-          << "\n\n";
+    fout_ << "= " << Position(move) << "\n\n";
   }
   void undo() {
     if (history_.empty()) {
@@ -153,25 +151,19 @@ private:
     for (size_t i = 0; i < 9; ++i) {
       for (size_t j = 0; j < 9; ++j) {
         Board b(board_);
-        if (b.place(bw, (8 - j) * 9 + i)) {
-          fout_ << ' ' << char(i + (i >= 8) + 'A') << char(j + '1');
+        size_t p = (8 - j) * 9 + i;
+        if (b.place(bw, p)) {
+          fout_ << ' ' << Position(p);
         }
       }
     }
-    /*for (size_t i = 0; i < 81; ++i) {
-      Board b(board_);
-      if (b.place(bw, i)) {
-        fout_ << ' ' << char(i % 9 + 'A') << char((8 - i / 9) + '1');
-      }
-    }*/
     fout_ << "\n\n";
   }
   void gogui_rules_side_to_move() {
     fout_ << "= " << (gogui_turns ? "black" : "white") << "\n\n";
   }
   void gogui_rules_final_result() const {
-    fout_ << "= ??? wins by ? points.\n"
-          << "  Final score is B ?? and W ??.\n\n";
+    fout_ << "= " << (!gogui_turns ? "Black" : "White") << " wins.\n\n";
   }
 
 private:

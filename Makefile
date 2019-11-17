@@ -1,13 +1,23 @@
 CXX ?= g++
 CXXFLAGS += -std=c++17 -O3 -Wall
+BIN = nogo
+SRCS = nogo.cpp
+DEPS = gtp.hpp board.hpp dset.hpp agent.hpp
+OBJS = $(SRCS:.cpp=)
+OBJS += $(DEPS:.hpp=)
+CHECKS = -checks=bugprone-*,clang-analyzer-*,modernize-*,performance-*,readability-*
 
-all: nogo
+.PHONY: $(BIN) format check clean
+all: $(BIN)
 
-nogo: nogo.cpp gtp.hpp board.hpp dset.hpp agent.hpp
-	${CXX} ${CXXFLAGS} $< -o $@
+$(BIN): $(SRCS) $(DEPS)
+	$(CXX) $(CXXFLAGS) $(SRCS) -o $@
 
 format:
-	clang-format -i *.cpp *.hpp
+	clang-format -i $(SRCS) $(DEPS)
+
+check:
+	clang-tidy $(SRCS) $(DEPS) $(CHECKS) -- $(CXXFLAGS)
 
 clean:
-	rm -f nogo gtp board dset agent
+	rm -f $(OBJS)

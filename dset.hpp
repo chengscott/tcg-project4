@@ -6,8 +6,9 @@ template <size_t N> struct DSet {
   void unions(size_t x, size_t y) {
     x = find(x);
     y = find(y);
-    if (x == y || x == 0 || y == 0)
+    if (x == y || x == 0 || y == 0) {
       return;
+    }
     if (dsize[x] < dsize[y]) {
       dset[x] = y;
       dsize[y] += dsize[x];
