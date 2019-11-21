@@ -79,7 +79,7 @@ private:
     Board b;
     std::swap(board_, b);
     history_.clear();
-    gogui_turns = true;
+    gogui_turns_ = true;
     fout_ << "=\n\n";
   }
   void komi() const {
@@ -103,15 +103,13 @@ private:
       return;
     }
     history_.push_back(board_);
-    gogui_turns = !gogui_turns;
+    gogui_turns_ = !gogui_turns_;
   }
   void genmove() {
     std::string sbw;
     fin_ >> sbw;
     size_t bw = tolower(sbw[0]) == 'w' ? 1 : 0;
     size_t move = agent_->take_action(board_, bw);
-    history_.push_back(board_);
-    board_.place(bw, move);
     fout_ << "= " << Position(move) << "\n\n";
   }
   void undo() {
@@ -126,7 +124,10 @@ private:
 
 private:
   /* Tournament Commands */
-  // void time_left() { ; }
+  // void time_settings() { ; }
+  void final_score() const {
+    fout_ << "= " << (!gogui_turns_ ? "B" : "W") << "+1\n\n";
+  }
 
 private:
   /* Regression Commands */
@@ -146,7 +147,7 @@ private:
   void gogui_rules_board() const { fout_ << "=\n" << board_; }
   void gogui_rules_board_size() const { fout_ << "= 9\n\n"; }
   void gogui_rules_legal_moves() const {
-    size_t bw = gogui_turns ? 0 : 1;
+    size_t bw = gogui_turns_ ? 0 : 1;
     fout_ << "=";
     for (size_t i = 0; i < 9; ++i) {
       for (size_t j = 0; j < 9; ++j) {
@@ -160,16 +161,17 @@ private:
     fout_ << "\n\n";
   }
   void gogui_rules_side_to_move() {
-    fout_ << "= " << (gogui_turns ? "black" : "white") << "\n\n";
+    fout_ << "= " << (gogui_turns_ ? "black" : "white") << "\n\n";
   }
   void gogui_rules_final_result() const {
-    fout_ << "= " << (!gogui_turns ? "Black" : "White") << " wins.\n\n";
+    fout_ << "= " << (!gogui_turns_ ? "Black" : "White") << " wins.\n\n";
   }
 
 private:
   void register_commands() {
     using Helper = void (GTPHelper::*)();
     // Adminstrative Commands
+    dispatcher_.emplace("quit", nullptr);
     dispatcher_.emplace("protocol_version",
                         (Helper)&GTPHelper::protocol_version);
     dispatcher_.emplace("name", (Helper)&GTPHelper::name);
@@ -185,6 +187,8 @@ private:
     dispatcher_.emplace("play", (Helper)&GTPHelper::play);
     dispatcher_.emplace("genmove", (Helper)&GTPHelper::genmove);
     dispatcher_.emplace("undo", (Helper)&GTPHelper::undo);
+    // Tournament Commands
+    dispatcher_.emplace("final_score", (Helper)&GTPHelper::final_score);
     // Debug Commands
     dispatcher_.emplace("showboard", (Helper)&GTPHelper::showboard);
     // GoGui Commands
@@ -211,5 +215,5 @@ private:
   Board board_;
   std::vector<Board> history_;
   std::unique_ptr<Agent> agent_;
-  bool gogui_turns = true;
+  bool gogui_turns_ = true;
 };

@@ -1,6 +1,7 @@
 #pragma once
 #include "dset.hpp"
 #include <iostream>
+#include <vector>
 
 struct Position {
   Position() = default;
@@ -66,6 +67,17 @@ public:
     }
     std::swap(*this, b);
     return true;
+  }
+
+  std::vector<size_t> get_legal_moves(size_t bw) const {
+    std::vector<size_t> moves;
+    for (size_t i = 0; i < 81; ++i) {
+      Board b(*this);
+      if (b.place(bw, i)) {
+        moves.push_back(i);
+      }
+    }
+    return moves;
   }
 
 public:
