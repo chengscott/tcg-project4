@@ -5,7 +5,7 @@
 #include <cmath>
 #include <map>
 #include <random>
-#include <tuple>
+#include <utility>
 #include <vector>
 
 class Agent {
@@ -67,11 +67,15 @@ public:
                       .count();
     } while (dt < threshold_time);
     auto &children = root.get_children();
+    size_t total_visits = 0;
     std::map<size_t, size_t> visits;
     for (const auto &child : children) {
       auto &&[move, visit] = child.get_move_visits();
       visits.emplace(move, visit);
+      total_visits += visit;
+      // std::cerr << Position(move) << ' ' << visit << std::endl;
     }
+    std::cerr << total_visits << std::endl;
     size_t best_move = std::max_element(std::begin(visits), std::end(visits),
                                         [](const auto &p1, const auto &p2) {
                                           return p1.second < p2.second;
@@ -104,7 +108,9 @@ private:
     Node(seed_t seed, const Board &board, size_t bw, size_t pos = 81,
          Node *parent = nullptr)
         : engine_(seed), moves_(board.get_legal_moves(bw)), bw_(bw), pos_(pos),
-          parent_(parent) {}
+          parent_(parent) {
+      children_.reserve(81);
+    }
     Node(const Node &) = default;
     Node(Node &&) noexcept = default;
     Node &operator=(const Node &) = default;
@@ -114,23 +120,21 @@ private:
   public:
     constexpr Node *get_parent() const { return parent_; };
     constexpr size_t get_player() const { return bw_; }
-    constexpr std::tuple<size_t, size_t> get_move() const {
-      return std::make_tuple(bw_, pos_);
-    }
+    constexpr std::pair<size_t, size_t> get_move() const { return {bw_, pos_}; }
     bool has_untried_moves() const { return !moves_.empty(); }
-    std::tuple<size_t, size_t> pop_untried_move() {
+    std::pair<size_t, size_t> pop_untried_move() {
       std::uniform_int_distribution<size_t> choose(0, moves_.size() - 1);
       auto it = moves_.begin() + choose(engine_);
       size_t pos = *it;
       moves_.erase(it);
-      return std::make_tuple(1 - bw_, pos);
+      return {1 - bw_, pos};
     }
     bool has_children() const { return !children_.empty(); }
     Node *get_UCT_child() {
+      double log_visits = std::log(visits_);
       for (auto &child : children_) {
         child.uct_score_ =
-            double(child.wins_) / double(child.visits_) +
-            std::sqrt(2.0 * std::log(double(visits_)) / child.visits_);
+            child.win_rate_ + std::sqrt(2.0 * log_visits / child.visits_);
       }
       return &*std::max_element(children_.begin(), children_.end(),
                                 [](const Node &lhs, const Node &rhs) {
@@ -144,13 +148,13 @@ private:
     }
     constexpr void update(bool win) {
       ++visits_;
-      wins_ += win ? 1 : 0;
+      win_rate_ += ((win ? 1 : 0) - win_rate_) / visits_;
     }
     constexpr const std::vector<Node> &get_children() const {
       return children_;
     }
-    constexpr std::tuple<size_t, size_t> get_move_visits() const {
-      return std::make_tuple(pos_, visits_);
+    constexpr std::pair<size_t, size_t> get_move_visits() const {
+      return {pos_, visits_};
     }
 
   private:
@@ -161,8 +165,8 @@ private:
     Node *parent_;
 
   private:
-    size_t visits_ = 0, wins_ = 0;
-    double uct_score_;
+    size_t visits_ = 0;
+    double win_rate_ = 0, uct_score_;
   };
 
 private:

@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <functional>
 #include <iostream>
+#include <iterator>
 #include <map>
 #include <memory>
 #include <vector>
@@ -31,7 +32,7 @@ public:
     }
     const auto &dispatch = dispatcher_.find(cmd);
     if (dispatch != dispatcher_.end()) {
-      (this->*dispatch->second)();
+      dispatch->second();
     } else {
       std::getline(fin_, cmd);
       fout_ << "? unknown command\n\n";
@@ -59,8 +60,9 @@ private:
   }
   void list_commands() const {
     fout_ << "=\n";
-    std::for_each(dispatcher_.begin(), dispatcher_.end(),
-                  [](const auto &p) { fout_ << p.first << '\n'; });
+    std::transform(dispatcher_.begin(), dispatcher_.end(),
+                   std::ostream_iterator<std::string>(fout_, "\n"),
+                   [](const auto &p) { return p.first; });
     fout_ << "\n";
   }
 
@@ -110,6 +112,8 @@ private:
     fin_ >> sbw;
     size_t bw = tolower(sbw[0]) == 'w' ? 1 : 0;
     size_t move = agent_->take_action(board_, bw);
+    history_.push_back(board_);
+    board_.place(bw, move);
     fout_ << "= " << Position(move) << "\n\n";
   }
   void undo() {
@@ -140,24 +144,21 @@ private:
 
 private:
   /* GoGui Rules */
-  void gogui_analyze_command() const {
-    ; // TODO
-  }
+  // void gogui_analyze_command() const { ; }
   void gogui_rules_game_id() const { fout_ << "= Nogo\n\n"; }
   void gogui_rules_board() const { fout_ << "=\n" << board_; }
   void gogui_rules_board_size() const { fout_ << "= 9\n\n"; }
   void gogui_rules_legal_moves() const {
     size_t bw = gogui_turns_ ? 0 : 1;
-    fout_ << "=";
-    for (size_t i = 0; i < 9; ++i) {
-      for (size_t j = 0; j < 9; ++j) {
-        Board b(board_);
-        size_t p = (8 - j) * 9 + i;
-        if (b.place(bw, p)) {
-          fout_ << ' ' << Position(p);
-        }
-      }
-    }
+    fout_ << "= ";
+    auto moves = board_.get_legal_moves(bw);
+    // std::sort(moves.begin(), moves.end(), [](size_t lhs, size_t rhs) {
+    //   Position lp(lhs), rp(rhs);
+    //   return (8 - lp.p1) * 9 + lp.p0 < (8 - rp.p1) * 9 + rp.p0;
+    // });
+    std::transform(moves.begin(), moves.end(),
+                   std::ostream_iterator<Position>(fout_, " "),
+                   [](const auto &p) { return Position(p); });
     fout_ << "\n\n";
   }
   void gogui_rules_side_to_move() {
@@ -168,50 +169,47 @@ private:
   }
 
 private:
+  template <class F> constexpr void register_command(std::string &&cmd, F &&f) {
+    dispatcher_.emplace(cmd, std::bind(f, this));
+  }
+
   void register_commands() {
-    using Helper = void (GTPHelper::*)();
     // Adminstrative Commands
     dispatcher_.emplace("quit", nullptr);
-    dispatcher_.emplace("protocol_version",
-                        (Helper)&GTPHelper::protocol_version);
-    dispatcher_.emplace("name", (Helper)&GTPHelper::name);
-    dispatcher_.emplace("version", (Helper)&GTPHelper::version);
-    dispatcher_.emplace("known_command", (Helper)&GTPHelper::known_command);
-    dispatcher_.emplace("list_commands", (Helper)&GTPHelper::list_commands);
-
+    register_command("protocol_version", &GTPHelper::protocol_version);
+    register_command("name", &GTPHelper::name);
+    register_command("version", &GTPHelper::version);
+    register_command("known_command", &GTPHelper::known_command);
+    register_command("list_commands", &GTPHelper::list_commands);
     // Setup Commands
-    dispatcher_.emplace("boardsize", (Helper)&GTPHelper::boardsize);
-    dispatcher_.emplace("clear_board", (Helper)&GTPHelper::clear_board);
-    dispatcher_.emplace("komi", (Helper)&GTPHelper::komi);
+    register_command("boardsize", &GTPHelper::boardsize);
+    register_command("clear_board", &GTPHelper::clear_board);
+    register_command("komi", &GTPHelper::komi);
     // Core Play Commands
-    dispatcher_.emplace("play", (Helper)&GTPHelper::play);
-    dispatcher_.emplace("genmove", (Helper)&GTPHelper::genmove);
-    dispatcher_.emplace("undo", (Helper)&GTPHelper::undo);
+    register_command("play", &GTPHelper::play);
+    register_command("genmove", &GTPHelper::genmove);
+    register_command("undo", &GTPHelper::undo);
     // Tournament Commands
-    dispatcher_.emplace("final_score", (Helper)&GTPHelper::final_score);
+    register_command("final_score", &GTPHelper::final_score);
     // Debug Commands
-    dispatcher_.emplace("showboard", (Helper)&GTPHelper::showboard);
+    register_command("showboard", &GTPHelper::showboard);
     // GoGui Commands
-    // dispatcher_.emplace("gogui-analyze_commands",
-    //                    (Helper)&GTPHelper::gogui_analyze_command);
-    dispatcher_.emplace("gogui-rules_game_id",
-                        (Helper)&GTPHelper::gogui_rules_game_id);
-    dispatcher_.emplace("gogui-rules_board",
-                        (Helper)&GTPHelper::gogui_rules_board);
-    dispatcher_.emplace("gogui-rules_board_size",
-                        (Helper)&GTPHelper::gogui_rules_board_size);
-    dispatcher_.emplace("gogui-rules_legal_moves",
-                        (Helper)&GTPHelper::gogui_rules_legal_moves);
-    dispatcher_.emplace("gogui-rules_side_to_move",
-                        (Helper)&GTPHelper::gogui_rules_side_to_move);
-    dispatcher_.emplace("gogui-rules_final_result",
-                        (Helper)&GTPHelper::gogui_rules_final_result);
+    register_command("gogui-rules_game_id", &GTPHelper::gogui_rules_game_id);
+    register_command("gogui-rules_board", &GTPHelper::gogui_rules_board);
+    register_command("gogui-rules_board_size",
+                     &GTPHelper::gogui_rules_board_size);
+    register_command("gogui-rules_legal_moves",
+                     &GTPHelper::gogui_rules_legal_moves);
+    register_command("gogui-rules_side_to_move",
+                     &GTPHelper::gogui_rules_side_to_move);
+    register_command("gogui-rules_final_result",
+                     &GTPHelper::gogui_rules_final_result);
   }
 
 private:
   constexpr static std::istream &fin_ = std::cin;
   constexpr static std::ostream &fout_ = std::cout;
-  std::map<std::string, void (GTPHelper::*)()> dispatcher_;
+  std::map<std::string, std::function<void()>> dispatcher_;
   Board board_;
   std::vector<Board> history_;
   std::unique_ptr<Agent> agent_;
