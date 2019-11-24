@@ -31,7 +31,7 @@ public:
       return false;
     }
     const auto &dispatch = dispatcher_.find(cmd);
-    if (dispatch != dispatcher_.end()) {
+    if (dispatch != std::end(dispatcher_)) {
       dispatch->second();
     } else {
       std::getline(fin_, cmd);
@@ -52,7 +52,7 @@ private:
   void known_command() const {
     std::string cmd;
     fin_ >> cmd;
-    if (dispatcher_.find(cmd) != dispatcher_.end()) {
+    if (dispatcher_.find(cmd) != std::end(dispatcher_)) {
       fout_ << "= true\n\n";
     } else {
       fout_ << "= false\n\n";
@@ -60,7 +60,7 @@ private:
   }
   void list_commands() const {
     fout_ << "=\n";
-    std::transform(dispatcher_.begin(), dispatcher_.end(),
+    std::transform(std::begin(dispatcher_), std::end(dispatcher_),
                    std::ostream_iterator<std::string>(fout_, "\n"),
                    [](const auto &p) { return p.first; });
     fout_ << "\n";
@@ -152,11 +152,12 @@ private:
     size_t bw = gogui_turns_ ? 0 : 1;
     fout_ << "= ";
     auto moves = board_.get_legal_moves(bw);
-    // std::sort(moves.begin(), moves.end(), [](size_t lhs, size_t rhs) {
+    // std::sort(std::begin(moves), std::end(moves), [](size_t lhs, size_t rhs)
+    // {
     //   Position lp(lhs), rp(rhs);
     //   return (8 - lp.p1) * 9 + lp.p0 < (8 - rp.p1) * 9 + rp.p0;
     // });
-    std::transform(moves.begin(), moves.end(),
+    std::transform(std::begin(moves), std::end(moves),
                    std::ostream_iterator<Position>(fout_, " "),
                    [](const auto &p) { return Position(p); });
     fout_ << "\n\n";

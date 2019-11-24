@@ -1,5 +1,5 @@
 CXX ?= g++
-CXXFLAGS += -std=c++17 -O3 -Wall
+CXXFLAGS += -std=c++17 -Wall -O3 #-flto
 BIN = nogo
 SRCS = nogo.cpp
 DEPS = gtp.hpp board.hpp dset.hpp agent.hpp
