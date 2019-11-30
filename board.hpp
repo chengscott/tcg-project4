@@ -1,6 +1,7 @@
 #pragma once
 #include "dset.hpp"
 #include <algorithm>
+#include <array>
 #include <iostream>
 #include <vector>
 
@@ -44,9 +45,9 @@ public:
     auto b = Board(*this);
     b.board_[bw] |= ((__uint128_t)1) << p;
     auto &dset = b.dset_[bw];
-    const auto dlen = dir_len_[p];
-    const auto &dirp = dir_[p];
-    std::for_each(dirp, dirp + dlen, [&](auto i) {
+    const auto &dir_begin = std::begin(dir_[p]),
+               &dir_end = dir_begin + dir_len_[p];
+    std::for_each(dir_begin, dir_end, [&](auto i) {
       if (b[i] == bw + 1) {
         dset.unions(p, i);
       }
@@ -54,7 +55,7 @@ public:
     if (!has_liberty(b, bw, p)) {
       return false;
     }
-    if (std::any_of(dirp, dirp + dlen, [&](auto i) {
+    if (std::any_of(dir_begin, dir_end, [&](auto i) {
           return (b[i] == 2 - bw) && !has_liberty(b, 1 - bw, i);
         })) {
       return false;
@@ -95,7 +96,9 @@ private:
     const size_t x = dset.find(p);
     for (size_t i = 0; i < 81; ++i) {
       if (x == dset.find(i)) {
-        if (std::any_of(dir_[i], dir_[i] + dir_len_[i],
+        const auto &dir_begin = std::begin(dir_[i]),
+                   &dir_end = dir_begin + dir_len_[i];
+        if (std::any_of(dir_begin, dir_end,
                         [&b](auto i) { return b[i] == 0; })) {
           return true;
         }
@@ -106,32 +109,34 @@ private:
 
 private:
   __uint128_t board_[2] = {};
-  DSet dset_[2];
-  constexpr const static size_t dir_len_[81] = {
-      2, 3, 3, 3, 3, 3, 3, 3, 2, 3, 4, 4, 4, 4, 4, 4, 4, 3, 3, 4, 4,
-      4, 4, 4, 4, 4, 3, 3, 4, 4, 4, 4, 4, 4, 4, 3, 3, 4, 4, 4, 4, 4,
-      4, 4, 3, 3, 4, 4, 4, 4, 4, 4, 4, 3, 3, 4, 4, 4, 4, 4, 4, 4, 3,
-      3, 4, 4, 4, 4, 4, 4, 4, 3, 2, 3, 3, 3, 3, 3, 3, 3, 2};
-  constexpr const static size_t dir_[81][4] = {
-      {1, 9, 81, 81},   {0, 2, 10, 81},   {1, 3, 11, 81},   {2, 4, 12, 81},
-      {3, 5, 13, 81},   {4, 6, 14, 81},   {5, 7, 15, 81},   {6, 8, 16, 81},
-      {7, 17, 81, 81},  {0, 10, 18, 81},  {1, 9, 11, 19},   {2, 10, 12, 20},
-      {3, 11, 13, 21},  {4, 12, 14, 22},  {5, 13, 15, 23},  {6, 14, 16, 24},
-      {7, 15, 17, 25},  {8, 16, 26, 81},  {9, 19, 27, 81},  {10, 18, 20, 28},
-      {11, 19, 21, 29}, {12, 20, 22, 30}, {13, 21, 23, 31}, {14, 22, 24, 32},
-      {15, 23, 25, 33}, {16, 24, 26, 34}, {17, 25, 35, 81}, {18, 28, 36, 81},
-      {19, 27, 29, 37}, {20, 28, 30, 38}, {21, 29, 31, 39}, {22, 30, 32, 40},
-      {23, 31, 33, 41}, {24, 32, 34, 42}, {25, 33, 35, 43}, {26, 34, 44, 81},
-      {27, 37, 45, 81}, {28, 36, 38, 46}, {29, 37, 39, 47}, {30, 38, 40, 48},
-      {31, 39, 41, 49}, {32, 40, 42, 50}, {33, 41, 43, 51}, {34, 42, 44, 52},
-      {35, 43, 53, 81}, {36, 46, 54, 81}, {37, 45, 47, 55}, {38, 46, 48, 56},
-      {39, 47, 49, 57}, {40, 48, 50, 58}, {41, 49, 51, 59}, {42, 50, 52, 60},
-      {43, 51, 53, 61}, {44, 52, 62, 81}, {45, 55, 63, 81}, {46, 54, 56, 64},
-      {47, 55, 57, 65}, {48, 56, 58, 66}, {49, 57, 59, 67}, {50, 58, 60, 68},
-      {51, 59, 61, 69}, {52, 60, 62, 70}, {53, 61, 71, 81}, {54, 64, 72, 81},
-      {55, 63, 65, 73}, {56, 64, 66, 74}, {57, 65, 67, 75}, {58, 66, 68, 76},
-      {59, 67, 69, 77}, {60, 68, 70, 78}, {61, 69, 71, 79}, {62, 70, 80, 81},
-      {63, 73, 81, 81}, {64, 72, 74, 81}, {65, 73, 75, 81}, {66, 74, 76, 81},
-      {67, 75, 77, 81}, {68, 76, 78, 81}, {69, 77, 79, 81}, {70, 78, 80, 81},
-      {71, 79, 81, 81}};
+  DSet<81> dset_[2];
+  const static constexpr auto dir_ = []() constexpr {
+    std::array<std::array<size_t, 4>, 81> ret{};
+    for (size_t i = 0; i < 81; ++i) {
+      auto &ri = ret[i];
+      size_t j = 0;
+      if (i / 9 > 0) {
+        ri[j++] = i - 9;
+      }
+      if (i % 9 > 0) {
+        ri[j++] = i - 1;
+      }
+      if (i % 9 < 8) {
+        ri[j++] = i + 1;
+      }
+      if (i / 9 < 8) {
+        ri[j++] = i + 9;
+      }
+    }
+    return ret;
+  }
+  ();
+  const static constexpr auto dir_len_ = []() constexpr {
+    std::array<size_t, 81> ret{};
+    for (size_t i = 0; i < 81; ++i) {
+      ret[i] = (i / 9 > 0) + (i % 9 > 0) + (i % 9 < 8) + (i / 9 < 8);
+    }
+    return ret;
+  }
+  ();
 };
