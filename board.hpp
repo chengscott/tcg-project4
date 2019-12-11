@@ -2,17 +2,31 @@
 #include <array>
 #include <bitset>
 #include <iostream>
-#include <vector>
+#include <random>
+#define BIT_TEST _Unchecked_test
+
+const auto MASK_RIGHT = ~std::bitset<81>("100000000"
+                                         "100000000"
+                                         "100000000"
+                                         "100000000"
+                                         "100000000"
+                                         "100000000"
+                                         "100000000"
+                                         "100000000"
+                                         "100000000"),
+           MASK_LEFT = MASK_RIGHT << 1;
 
 class Board {
 public:
-  size_t operator[](size_t p) const noexcept {
+  using board_t = std::bitset<81>;
+
+  constexpr size_t operator[](size_t p) const noexcept {
     return static_cast<size_t>(board_[0][p]) +
            static_cast<size_t>(board_[1][p]) * 2u;
   }
   bool place(size_t bw, size_t p) noexcept {
     // assert(bw == 0 || bw == 1);
-    if (forbid_[bw]._Unchecked_test(p)) {
+    if (forbid_[bw].BIT_TEST(p)) {
       return false;
     }
     // place
@@ -27,9 +41,9 @@ public:
     const size_t dirlen = dir_len_[p];
     for (size_t i = 0; i < dirlen; ++i) {
       const size_t x = dir_[p][i];
-      if (board_op._Unchecked_test(x)) {
+      if (board_op.BIT_TEST(x)) {
         check_valid(x, board_op, board, forbid_op, forbid);
-      } else if (!board._Unchecked_test(x)) {
+      } else if (!board.BIT_TEST(x)) {
         // assert(!board_op.test(x));
         board_op.set(x);
         find_liberty(board_op, x, board | board_op, liberty);
@@ -42,15 +56,26 @@ public:
     return true;
   }
 
-  std::vector<size_t> get_legal_moves(size_t bw) const noexcept {
-    std::vector<size_t> moves;
-    const auto &forbid = forbid_[bw];
-    for (size_t i = 0; i < 81; ++i) {
-      if (!forbid._Unchecked_test(i)) {
-        moves.push_back(i);
-      }
+  bool has_legal_move(size_t bw) const noexcept { return !forbid_[bw].all(); }
+
+  board_t get_legal_moves(size_t bw) const noexcept { return ~forbid_[bw]; }
+
+  template <class PRNG>
+  size_t random_legal_move(size_t bw, PRNG &rng) const noexcept {
+    return random_move_from_board(~forbid_[bw], rng);
+  }
+
+  template <class PRNG>
+  static size_t random_move_from_board(const board_t &valid,
+                                       PRNG &rng) noexcept {
+    // assert(valid.any());
+    std::uniform_int_distribution<> choose(0, valid.count() - 1);
+    const size_t index = choose(rng);
+    size_t action = valid._Find_first();
+    for (size_t i = 1; i < index; ++i) {
+      action = valid._Find_next(action);
     }
-    return moves;
+    return action;
   }
 
 public:
@@ -68,11 +93,9 @@ public:
   }
 
 private:
-  using board_t = std::bitset<81>;
   static void find_liberty(const board_t &board, size_t p,
                            const board_t &all_board,
                            board_t &liberty) noexcept {
-    // TODO: check <= 2 only
     // find component
     // assert(board.test(p));
     board_t component;
@@ -87,30 +110,21 @@ private:
       size_t dirlen = dir_len_[cur];
       for (size_t i = 0; i < dirlen; ++i) {
         const auto &diri = dir[i];
-        if (!instack._Unchecked_test(diri) && board._Unchecked_test(diri)) {
+        if (!instack.BIT_TEST(diri) && board.BIT_TEST(diri)) {
           vstack[size++] = diri;
           instack.set(diri);
         }
       }
     }
     // find liberty
-    static const board_t right = ~board_t("100000000"
-                                          "100000000"
-                                          "100000000"
-                                          "100000000"
-                                          "100000000"
-                                          "100000000"
-                                          "100000000"
-                                          "100000000"
-                                          "100000000"),
-                         left = right << 1;
-    liberty = ((component << 9) | (component >> 9) |
-               ((component & right) << 1) | ((component & left) >> 1)) &
-              ~all_board;
+    liberty =
+        ((component << 9) | (component >> 9) | ((component & MASK_RIGHT) << 1) |
+         ((component & MASK_LEFT) >> 1)) &
+        ~all_board;
   }
 
   void check_valid(size_t p, board_t &board, board_t &board_op, board_t &forbid,
-                   board_t &forbid_op) {
+                   board_t &forbid_op) noexcept {
     board_t liberty;
     find_liberty(board, p, board | board_op, liberty);
     if (liberty.count() == 1) {

@@ -177,16 +177,11 @@ private:
   void gogui_rules_board_size() const { fout_ << "= 9\n\n"; }
   void gogui_rules_legal_moves() const {
     size_t bw = gogui_turns_ ? 0 : 1;
-    fout_ << "= ";
+    fout_ << "=";
     auto moves = board_.get_legal_moves(bw);
-    // std::sort(std::begin(moves), std::end(moves), [](size_t lhs, size_t rhs)
-    // {
-    //   Position lp(lhs), rp(rhs);
-    //   return (8 - lp.p1) * 9 + lp.p0 < (8 - rp.p1) * 9 + rp.p0;
-    // });
-    std::transform(std::begin(moves), std::end(moves),
-                   std::ostream_iterator<Position>(fout_, " "),
-                   [](const auto &p) { return Position(p); });
+    for (size_t p = moves._Find_first(); p != 81; p = moves._Find_next(p)) {
+      fout_ << " " << Position(p);
+    }
     fout_ << "\n\n";
   }
   void gogui_rules_side_to_move() {

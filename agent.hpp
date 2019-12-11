@@ -25,9 +25,7 @@ public:
 class RandomAgent final : public Agent {
 public:
   size_t take_action(const Board &board, size_t bw) override {
-    auto moves = board.get_legal_moves(bw);
-    std::uniform_int_distribution<size_t> choose(0, moves.size() - 1);
-    return moves[choose(engine_)];
+    return board.random_legal_move(bw, engine_);
   }
 
 private:
@@ -41,7 +39,7 @@ private:
 
   public:
     Node() = default;
-    Node(seed_t seed, Board &&b, size_t bw, size_t pos = 81,
+    Node(seed_t seed, Board b, size_t bw, size_t pos = 81,
          Node *parent = nullptr)
         : engine_(seed), moves_(b.get_legal_moves(bw)), board_(b), bw_(bw),
           pos_(pos), parent_(parent) {}
@@ -52,15 +50,13 @@ private:
     ~Node() = default;
 
   public:
-    constexpr Node *get_parent() const { return parent_; };
-    constexpr size_t get_player() const { return bw_; }
-    constexpr const Board &get_board() const { return board_; }
-    bool has_untried_moves() const noexcept { return !moves_.empty(); }
-    std::pair<size_t, size_t> pop_untried_move() {
-      std::uniform_int_distribution<size_t> choose(0, moves_.size() - 1);
-      auto it = std::begin(moves_) + choose(engine_);
-      size_t pos = *it;
-      moves_.erase(it);
+    constexpr Node *get_parent() const noexcept { return parent_; };
+    constexpr size_t get_player() const noexcept { return bw_; }
+    constexpr const Board &get_board() const noexcept { return board_; }
+    bool has_untried_moves() const noexcept { return moves_.any(); }
+    std::pair<size_t, size_t> pop_untried_move() noexcept {
+      size_t pos = Board::random_move_from_board(moves_, engine_);
+      moves_.reset(pos);
       return {1 - bw_, pos};
     }
     bool has_children() const noexcept { return !children_.empty(); }
@@ -82,14 +78,13 @@ private:
       std::uniform_int_distribution<> choose(0, max_children.size() - 1);
       return max_children[choose(engine_)];
     }
-    Node *add_child(seed_t seed, size_t bw, size_t pos) {
+    Node *add_child(seed_t seed, size_t bw, size_t pos) noexcept {
       Board board(board_);
       board.place(bw, pos);
-      Node node(seed, std::move(board), bw, pos, this);
-      children_.emplace_back(node);
+      children_.emplace_back(seed, board, bw, pos, this);
       return &children_.back();
     }
-    constexpr void update(bool win) {
+    constexpr void update(bool win) noexcept {
       ++visits_;
       log_visits_ = std::log(visits_);
       wins_ += (win ? 1 : 0);
@@ -107,7 +102,7 @@ private:
   private:
     std::default_random_engine engine_;
     std::vector<Node> children_;
-    std::vector<size_t> moves_;
+    Board::board_t moves_;
     Board board_;
     size_t bw_, pos_;
     Node *parent_;
@@ -158,29 +153,15 @@ public:
   }
 
 private:
-  size_t rollout(Board board, size_t bw) {
-    while (true) {
-      std::shuffle(std::begin(all_moves_), std::end(all_moves_), engine_);
-      auto move =
-          std::find_if(std::begin(all_moves_), std::end(all_moves_),
-                       [&](size_t move) { return board.place(bw, move); });
-      if (move == all_moves_.end()) {
-        break;
-      }
+  size_t rollout(Board board, size_t bw) noexcept {
+    while (board.has_legal_move(bw)) {
+      board.place(bw, board.random_legal_move(bw, engine_));
       bw = 1 - bw;
-    };
-    return bw;
+    }
+    return 1 - bw;
   }
 
 private:
-  std::array<size_t, 81> all_moves_ = []() constexpr {
-    std::array<size_t, 81> ret{};
-    for (size_t i = 0; i < 81; ++i) {
-      ret[i] = i;
-    }
-    return ret;
-  }
-  ();
   std::random_device seed_{};
   std::default_random_engine engine_{seed_()};
 };
