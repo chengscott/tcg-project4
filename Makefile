@@ -2,7 +2,7 @@ CXX ?= g++
 CXXFLAGS += -std=c++17 -Wall -O3 #-flto
 BIN = nogo
 SRCS = nogo.cpp
-DEPS = gtp.hpp board.hpp dset.hpp agent.hpp
+DEPS = gtp.hpp board.hpp agent.hpp
 OBJS = $(SRCS:.cpp=)
 OBJS += $(DEPS:.hpp=)
 CHECKS = -checks=bugprone-*,clang-analyzer-*,modernize-*,performance-*,readability-*

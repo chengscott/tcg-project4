@@ -9,6 +9,33 @@
 #include <memory>
 #include <vector>
 
+struct Position {
+  Position() = default;
+  Position(const Position &) = default;
+  Position(Position &&) noexcept = default;
+  explicit Position(size_t p) : p0(p % 9), p1(p / 9) {}
+  explicit operator size_t() const { return p0 + p1 * 9; }
+  Position &operator=(const Position &) = default;
+  Position &operator=(Position &&) noexcept = default;
+  ~Position() = default;
+
+  friend std::istream &operator>>(std::istream &in, Position &p) {
+    std::string ipos;
+    in >> ipos;
+    // assert(ipos.size() == 2);
+    size_t p0 = tolower(ipos[0]) - 'a';
+    p.p0 = p0 > 8 ? p0 - 1 : p0;
+    p.p1 = 8 - (ipos[1] - '1');
+    return in;
+  }
+  friend std::ostream &operator<<(std::ostream &out, const Position &p) {
+    out << char((p.p0 >= 8 ? 1 : 0) + p.p0 + 'A') << char((8 - p.p1) + '1');
+    return out;
+  }
+
+  size_t p0, p1;
+};
+
 class GTPHelper {
 public:
   static GTPHelper &getInstance() {
@@ -195,16 +222,18 @@ private:
     // Debug Commands
     register_command("showboard", &GTPHelper::showboard);
     // GoGui Commands
-    register_command("gogui-rules_game_id", &GTPHelper::gogui_rules_game_id);
-    register_command("gogui-rules_board", &GTPHelper::gogui_rules_board);
-    register_command("gogui-rules_board_size",
-                     &GTPHelper::gogui_rules_board_size);
-    register_command("gogui-rules_legal_moves",
-                     &GTPHelper::gogui_rules_legal_moves);
-    register_command("gogui-rules_side_to_move",
-                     &GTPHelper::gogui_rules_side_to_move);
-    register_command("gogui-rules_final_result",
-                     &GTPHelper::gogui_rules_final_result);
+    if constexpr (false) {
+      register_command("gogui-rules_game_id", &GTPHelper::gogui_rules_game_id);
+      register_command("gogui-rules_board", &GTPHelper::gogui_rules_board);
+      register_command("gogui-rules_board_size",
+                       &GTPHelper::gogui_rules_board_size);
+      register_command("gogui-rules_legal_moves",
+                       &GTPHelper::gogui_rules_legal_moves);
+      register_command("gogui-rules_side_to_move",
+                       &GTPHelper::gogui_rules_side_to_move);
+      register_command("gogui-rules_final_result",
+                       &GTPHelper::gogui_rules_final_result);
+    }
   }
 
 private:

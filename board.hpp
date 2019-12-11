@@ -1,74 +1,52 @@
 #pragma once
-#include "dset.hpp"
-#include <algorithm>
 #include <array>
+#include <bitset>
 #include <iostream>
 #include <vector>
 
-struct Position {
-  Position() = default;
-  Position(const Position &) = default;
-  Position(Position &&) noexcept = default;
-  explicit Position(size_t p) : p0(p % 9), p1(p / 9) {}
-  explicit operator size_t() const { return p0 + p1 * 9; }
-  Position &operator=(const Position &) = default;
-  Position &operator=(Position &&) noexcept = default;
-  ~Position() = default;
-
-  friend std::istream &operator>>(std::istream &in, Position &p) {
-    std::string ipos;
-    in >> ipos;
-    // assert(ipos.size() == 2);
-    size_t p0 = tolower(ipos[0]) - 'a';
-    p.p0 = p0 > 8 ? p0 - 1 : p0;
-    p.p1 = 8 - (ipos[1] - '1');
-    return in;
-  }
-  friend std::ostream &operator<<(std::ostream &out, const Position &p) {
-    out << char((p.p0 >= 8 ? 1 : 0) + p.p0 + 'A') << char((8 - p.p1) + '1');
-    return out;
-  }
-
-  size_t p0, p1;
-};
-
 class Board {
 public:
-  size_t operator[](size_t p) const {
-    return ((board_[0] >> p) & 1u) + (((board_[1] >> p) & 1u) << 1u);
+  size_t operator[](size_t p) const noexcept {
+    return static_cast<size_t>(board_[0][p]) +
+           static_cast<size_t>(board_[1][p]) * 2u;
   }
-  bool place(size_t bw, size_t p) {
+  bool place(size_t bw, size_t p) noexcept {
     // assert(bw == 0 || bw == 1);
-    if (operator[](p) != 0) {
+    if (forbid_[bw]._Unchecked_test(p)) {
       return false;
     }
-    auto b = Board(*this);
-    b.board_[bw] |= ((__uint128_t)1) << p;
-    auto &dset = b.dset_[bw];
-    const auto &dir_begin = std::begin(dir_[p]),
-               &dir_end = dir_begin + dir_len_[p];
-    std::for_each(dir_begin, dir_end, [&](auto i) {
-      if (b[i] == bw + 1) {
-        dset.unions(p, i);
+    // place
+    auto &forbid = forbid_[bw], &forbid_op = forbid_[1 - bw];
+    auto &board = board_[bw].set(p), &board_op = board_[1 - bw];
+    forbid.set(p);
+    forbid_op.set(p);
+    // check current component
+    check_valid(p, board, board_op, forbid, forbid_op);
+    // check neighbors
+    board_t liberty;
+    const size_t dirlen = dir_len_[p];
+    for (size_t i = 0; i < dirlen; ++i) {
+      const size_t x = dir_[p][i];
+      if (board_op._Unchecked_test(x)) {
+        check_valid(x, board_op, board, forbid_op, forbid);
+      } else if (!board._Unchecked_test(x)) {
+        // assert(!board_op.test(x));
+        board_op.set(x);
+        find_liberty(board_op, x, board | board_op, liberty);
+        if (liberty.none()) {
+          forbid_op.set(x);
+        }
+        board_op.reset(x);
       }
-    });
-    if (!has_liberty(b, bw, p)) {
-      return false;
     }
-    if (std::any_of(dir_begin, dir_end, [&](auto i) {
-          return (b[i] == 2 - bw) && !has_liberty(b, 1 - bw, i);
-        })) {
-      return false;
-    }
-    std::swap(*this, b);
     return true;
   }
 
-  std::vector<size_t> get_legal_moves(size_t bw) const {
+  std::vector<size_t> get_legal_moves(size_t bw) const noexcept {
     std::vector<size_t> moves;
+    const auto &forbid = forbid_[bw];
     for (size_t i = 0; i < 81; ++i) {
-      Board b(*this);
-      if (b.place(bw, i)) {
+      if (!forbid._Unchecked_test(i)) {
         moves.push_back(i);
       }
     }
@@ -90,26 +68,67 @@ public:
   }
 
 private:
-  static bool has_liberty(Board &b, size_t bw, size_t p) {
-    // assert(bw == 0 || bw == 1);
-    auto &dset = b.dset_[bw];
-    const size_t x = dset.find(p);
-    for (size_t i = 0; i < 81; ++i) {
-      if (x == dset.find(i)) {
-        const auto &dir_begin = std::begin(dir_[i]),
-                   &dir_end = dir_begin + dir_len_[i];
-        if (std::any_of(dir_begin, dir_end,
-                        [&b](auto i) { return b[i] == 0; })) {
-          return true;
+  using board_t = std::bitset<81>;
+  static void find_liberty(const board_t &board, size_t p,
+                           const board_t &all_board,
+                           board_t &liberty) noexcept {
+    // TODO: check <= 2 only
+    // find component
+    // assert(board.test(p));
+    board_t component;
+    size_t vstack[81], size = 0, cur;
+    board_t instack;
+    vstack[size++] = p;
+    instack.set(p);
+    while (size > 0) {
+      cur = vstack[--size];
+      component.set(cur);
+      const auto &dir = dir_[cur];
+      size_t dirlen = dir_len_[cur];
+      for (size_t i = 0; i < dirlen; ++i) {
+        const auto &diri = dir[i];
+        if (!instack._Unchecked_test(diri) && board._Unchecked_test(diri)) {
+          vstack[size++] = diri;
+          instack.set(diri);
         }
       }
     }
-    return false;
+    // find liberty
+    static const board_t right = ~board_t("100000000"
+                                          "100000000"
+                                          "100000000"
+                                          "100000000"
+                                          "100000000"
+                                          "100000000"
+                                          "100000000"
+                                          "100000000"
+                                          "100000000"),
+                         left = right << 1;
+    liberty = ((component << 9) | (component >> 9) |
+               ((component & right) << 1) | ((component & left) >> 1)) &
+              ~all_board;
+  }
+
+  void check_valid(size_t p, board_t &board, board_t &board_op, board_t &forbid,
+                   board_t &forbid_op) {
+    board_t liberty;
+    find_liberty(board, p, board | board_op, liberty);
+    if (liberty.count() == 1) {
+      const size_t x = liberty._Find_first();
+      forbid_op.set(x);
+
+      // assert(!board.test(x));
+      board.set(x);
+      find_liberty(board, x, board | board_op, liberty);
+      if (liberty.none()) {
+        forbid.set(x);
+      }
+      board.reset(x);
+    }
   }
 
 private:
-  __uint128_t board_[2] = {};
-  DSet<81> dset_[2];
+  board_t board_[2], forbid_[2];
   const static constexpr auto dir_ = []() constexpr {
     std::array<std::array<size_t, 4>, 81> ret{};
     for (size_t i = 0; i < 81; ++i) {
@@ -134,7 +153,8 @@ private:
   const static constexpr auto dir_len_ = []() constexpr {
     std::array<size_t, 81> ret{};
     for (size_t i = 0; i < 81; ++i) {
-      ret[i] = (i / 9 > 0) + (i % 9 > 0) + (i % 9 < 8) + (i / 9 < 8);
+      ret[i] = static_cast<int>(i / 9 > 0) + static_cast<int>(i % 9 > 0) +
+               static_cast<int>(i % 9 < 8) + static_cast<int>(i / 9 < 8);
     }
     return ret;
   }
