@@ -33,14 +33,11 @@ private:
 class MCTSAgent final : public Agent {
 private:
   class Node {
-    using seed_t = std::random_device::result_type;
-
   public:
     Node() = default;
-    Node(seed_t seed, Board b, size_t bw, size_t pos = 81,
+    Node(Board::board_t moves, size_t bw, size_t pos = 81,
          Node *parent = nullptr)
-        : engine_(seed), moves_(b.get_legal_moves(bw)), board_(b), bw_(bw),
-          pos_(pos), parent_(parent) {}
+        : moves_(std::move(moves)), bw_(bw), pos_(pos), parent_(parent) {}
     Node(const Node &) = default;
     Node(Node &&) noexcept = default;
     Node &operator=(const Node &) = default;
@@ -50,15 +47,19 @@ private:
   public:
     constexpr Node *get_parent() const noexcept { return parent_; };
     constexpr size_t get_player() const noexcept { return bw_; }
-    constexpr const Board &get_board() const noexcept { return board_; }
+    constexpr void get_move(size_t &bw, size_t &pos) const noexcept {
+      bw = bw_;
+      pos = pos_;
+    }
     bool has_untried_moves() const noexcept { return moves_.any(); }
-    void pop_untried_move(size_t &bw, size_t &pos) noexcept {
+    template <class PRNG>
+    void pop_untried_move(PRNG &rng, size_t &bw, size_t &pos) noexcept {
       bw = 1 - bw_;
-      pos = Board::random_move_from_board(moves_, engine_);
+      pos = Board::random_move_from_board(moves_, rng);
       moves_.reset(pos);
     }
     bool has_children() const noexcept { return !children_.empty(); }
-    Node *get_UCT_child() {
+    template <class PRNG> Node *get_UCT_child(PRNG &rng) {
       float max_score = -1;
       for (auto &child : children_) {
         const float score = (child.rave_wins_ + child.wins_ +
@@ -74,12 +75,10 @@ private:
         }
       }
       std::uniform_int_distribution<size_t> choose(0, max_children.size() - 1);
-      return max_children[choose(engine_)];
+      return max_children[choose(rng)];
     }
-    Node *add_child(seed_t seed, size_t bw, size_t pos) noexcept {
-      Board board(board_);
-      board.place(bw, pos);
-      children_.emplace_back(seed, board, bw, pos, this);
+    Node *add_child(Board::board_t moves, size_t bw, size_t pos) noexcept {
+      children_.emplace_back(std::move(moves), bw, pos, this);
       return &children_.back();
     }
     constexpr void update(bool win) noexcept {
@@ -97,10 +96,8 @@ private:
     }
 
   private:
-    std::default_random_engine engine_;
     std::vector<Node> children_;
     Board::board_t moves_;
-    Board board_;
     size_t bw_, pos_;
     Node *parent_;
 
@@ -117,23 +114,26 @@ public:
     if (!b.has_legal_move(bw)) {
       return 81;
     }
-    size_t total_counts = 0;
+    size_t total_counts = 0, cbw, cpos;
     const auto start_time = hclock::now();
-    Node root(seed_(), Board(b), bw);
+    Node root(b.get_legal_moves(bw), bw);
     do {
       Node *node = &root;
+      Board board(b);
       // selection
       while (!node->has_untried_moves() && node->has_children()) {
-        node = node->get_UCT_child();
+        node = node->get_UCT_child(engine_);
+        node->get_move(cbw, cpos);
+        board.place(cbw, cpos);
       }
       // expansion
       if (node->has_untried_moves()) {
-        size_t cbw, cpos;
-        node->pop_untried_move(cbw, cpos);
-        node = node->add_child(seed_(), cbw, cpos);
+        node->pop_untried_move(engine_, cbw, cpos);
+        board.place(cbw, cpos);
+        node = node->add_child(board.get_legal_moves(cbw), cbw, cpos);
       }
       // simulation
-      size_t winner = rollout(node->get_board(), node->get_player());
+      size_t winner = rollout(engine_, board, node->get_player());
       // backpropogation
       while (node != nullptr) {
         node->update(winner == node->get_player());
@@ -158,9 +158,10 @@ public:
   }
 
 private:
-  size_t rollout(Board board, size_t bw) noexcept {
+  template <class PRNG>
+  static size_t rollout(PRNG &rng, Board board, size_t bw) noexcept {
     while (board.has_legal_move(bw)) {
-      board.place(bw, board.random_legal_move(bw, engine_));
+      board.place(bw, board.random_legal_move(bw, rng));
       bw = 1 - bw;
     }
     return 1 - bw;
