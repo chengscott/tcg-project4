@@ -69,7 +69,7 @@ public:
   static size_t random_move_from_board(const board_t &valid,
                                        PRNG &rng) noexcept {
     // assert(valid.any());
-    std::uniform_int_distribution<> choose(0, valid.count() - 1);
+    std::uniform_int_distribution<size_t> choose(0, valid.count() - 1);
     const size_t index = choose(rng);
     size_t action = valid._Find_first();
     for (size_t i = 1; i < index; ++i) {
@@ -167,8 +167,8 @@ private:
   const static constexpr auto dir_len_ = []() constexpr {
     std::array<size_t, 81> ret{};
     for (size_t i = 0; i < 81; ++i) {
-      ret[i] = static_cast<int>(i / 9 > 0) + static_cast<int>(i % 9 > 0) +
-               static_cast<int>(i % 9 < 8) + static_cast<int>(i / 9 < 8);
+      ret[i] = static_cast<size_t>(i / 9 > 0) + static_cast<size_t>(i % 9 > 0) +
+               static_cast<size_t>(i % 9 < 8) + static_cast<size_t>(i / 9 < 8);
     }
     return ret;
   }

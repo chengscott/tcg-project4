@@ -23,9 +23,9 @@ struct Position {
     std::string ipos;
     in >> ipos;
     // assert(ipos.size() == 2);
-    size_t p0 = tolower(ipos[0]) - 'a';
-    p.p0 = p0 > 8 ? p0 - 1 : p0;
-    p.p1 = 8 - (ipos[1] - '1');
+    auto pp0 = static_cast<size_t>(tolower(ipos[0]) - 'a');
+    p.p0 = pp0 > 8 ? pp0 - 1 : pp0;
+    p.p1 = static_cast<size_t>(8 - (ipos[1] - '1'));
     return in;
   }
   friend std::ostream &operator<<(std::ostream &out, const Position &p) {
@@ -42,7 +42,10 @@ public:
     static GTPHelper instance;
     return instance;
   }
-  GTPHelper() { register_commands(); }
+  GTPHelper() {
+    std::ios::sync_with_stdio(false);
+    register_commands();
+  }
   ~GTPHelper() = default;
   GTPHelper(GTPHelper const &) = delete;
   GTPHelper(GTPHelper &&) = delete;
@@ -139,9 +142,13 @@ private:
     fin_ >> sbw;
     size_t bw = tolower(sbw[0]) == 'w' ? 1 : 0;
     size_t move = agent_->take_action(board_, bw);
-    history_.push_back(board_);
-    board_.place(bw, move);
-    fout_ << "= " << Position(move) << "\n\n";
+    if (move < 81) {
+      history_.push_back(board_);
+      board_.place(bw, move);
+      fout_ << "= " << Position(move) << "\n\n";
+    } else {
+      fout_ << "= resign\n\n";
+    }
   }
   void undo() {
     if (history_.empty()) {
@@ -216,19 +223,19 @@ private:
     register_command("final_score", &GTPHelper::final_score);
     // Debug Commands
     register_command("showboard", &GTPHelper::showboard);
+#ifdef ENABLE_RULES
     // GoGui Commands
-    if constexpr (false) {
-      register_command("gogui-rules_game_id", &GTPHelper::gogui_rules_game_id);
-      register_command("gogui-rules_board", &GTPHelper::gogui_rules_board);
-      register_command("gogui-rules_board_size",
-                       &GTPHelper::gogui_rules_board_size);
-      register_command("gogui-rules_legal_moves",
-                       &GTPHelper::gogui_rules_legal_moves);
-      register_command("gogui-rules_side_to_move",
-                       &GTPHelper::gogui_rules_side_to_move);
-      register_command("gogui-rules_final_result",
-                       &GTPHelper::gogui_rules_final_result);
-    }
+    register_command("gogui-rules_game_id", &GTPHelper::gogui_rules_game_id);
+    register_command("gogui-rules_board", &GTPHelper::gogui_rules_board);
+    register_command("gogui-rules_board_size",
+                     &GTPHelper::gogui_rules_board_size);
+    register_command("gogui-rules_legal_moves",
+                     &GTPHelper::gogui_rules_legal_moves);
+    register_command("gogui-rules_side_to_move",
+                     &GTPHelper::gogui_rules_side_to_move);
+    register_command("gogui-rules_final_result",
+                     &GTPHelper::gogui_rules_final_result);
+#endif
   }
 
 private:

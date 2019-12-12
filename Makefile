@@ -1,5 +1,7 @@
 CXX ?= g++
-CXXFLAGS += -std=c++17 -Wall -O3 #-flto
+CXXFLAGS += -std=c++17 -O3 -march=native #-flto
+CXXFLAGS += -Wall -Wextra -Wshadow -Wnon-virtual-dtor -Wpedantic
+CXXFLAGS += -Wunused -Wsign-conversion -Wdouble-promotion
 BIN = nogo
 SRCS = nogo.cpp
 DEPS = gtp.hpp board.hpp agent.hpp
