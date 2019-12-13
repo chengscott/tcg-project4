@@ -3,10 +3,9 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <memory>
 #include <random>
 #include <unordered_map>
-#include <utility>
-#include <vector>
 
 class Agent {
 public:
@@ -34,72 +33,84 @@ class MCTSAgent final : public Agent {
 private:
   class Node {
   public:
-    Node() = default;
-    Node(Board::board_t moves, size_t bw, size_t pos = 81,
-         Node *parent = nullptr)
-        : moves_(std::move(moves)), bw_(bw), pos_(pos), parent_(parent) {}
-    Node(const Node &) = default;
-    Node(Node &&) noexcept = default;
-    Node &operator=(const Node &) = default;
-    Node &operator=(Node &&) noexcept = default;
-    ~Node() = default;
-
-  public:
+    constexpr void init_bw(size_t bw) noexcept { bw_ = bw; }
     constexpr Node *get_parent() const noexcept { return parent_; };
-    constexpr size_t get_player() const noexcept { return bw_; }
-    constexpr void get_move(size_t &bw, size_t &pos) const noexcept {
-      bw = bw_;
-      pos = pos_;
-    }
-    bool has_untried_moves() const noexcept { return moves_.any(); }
+    constexpr bool has_children() const noexcept { return children_size_ > 0; }
     template <class PRNG>
-    void pop_untried_move(PRNG &rng, size_t &bw, size_t &pos) noexcept {
-      bw = 1 - bw_;
-      pos = Board::random_move_from_board(moves_, rng);
-      moves_.reset(pos);
-    }
-    bool has_children() const noexcept { return !children_.empty(); }
-    template <class PRNG> Node *get_UCT_child(PRNG &rng) {
+    Node *select_child(PRNG &rng, size_t &bw, size_t &pos) {
       float max_score = -1;
-      for (auto &child : children_) {
+      for (size_t i = 0; i < children_size_; ++i) {
+        auto &child = children_[i];
         const float score = (child.rave_wins_ + child.wins_ +
                              std::sqrt(log_visits_ * child.visits_) * 0.25f) /
                             (child.rave_visits_ + child.visits_);
         child.uct_score_ = score;
         max_score = std::max(score, max_score);
       }
-      std::vector<Node *> max_children;
-      for (auto &child : children_) {
-        if (child.uct_score_ == max_score) {
-          max_children.push_back(&child);
+      Board::board_t max_children{};
+      for (size_t i = 0; i < children_size_; ++i) {
+        if (children_[i].uct_score_ == max_score) {
+          max_children.set(i);
         }
       }
-      std::uniform_int_distribution<size_t> choose(0, max_children.size() - 1);
-      return max_children[choose(rng)];
+      size_t idx = Board::random_move_from_board(max_children, rng);
+      auto &child = children_[idx];
+      bw = child.bw_;
+      pos = child.pos_;
+      return &child;
     }
-    Node *add_child(Board::board_t moves, size_t bw, size_t pos) noexcept {
-      children_.emplace_back(std::move(moves), bw, pos, this);
-      return &children_.back();
+    bool expand(const Board &b) noexcept {
+      auto moves(b.get_legal_moves(1 - bw_));
+      const size_t size = moves.count();
+      if (size == 0) {
+        return false;
+      }
+      // expand children
+      children_size_ = size;
+      children_ = std::make_unique<Node[]>(size);
+      for (size_t i = 0, pos = moves._Find_first(); i < size;
+           ++i, pos = moves._Find_next(pos)) {
+        children_[i].init(1 - bw_, pos, this);
+      }
+      return true;
     }
-    constexpr void update(bool win) noexcept {
+    void update(size_t winner,
+                const std::array<Board::board_t, 2> &raves) noexcept {
       ++visits_;
       log_visits_ = std::log(visits_);
-      wins_ += (win ? 1 : 0);
+      wins_ += static_cast<size_t>(winner == bw_);
+      // rave
+      const size_t csize = children_size_,
+                   cwin = static_cast<size_t>(winner == 1 - bw_);
+      const auto &rave = raves[1 - bw_];
+      for (size_t i = 0; i < csize; ++i) {
+        auto &child = children_[i];
+        if (rave.BIT_TEST(child.pos_)) {
+          ++child.rave_visits_;
+          child.rave_wins_ += cwin;
+        }
+      }
     }
     void get_children_visits(std::unordered_map<size_t, size_t> &visits) const
         noexcept {
-      std::transform(std::begin(children_), std::end(children_),
-                     std::inserter(visits, std::end(visits)),
-                     [](const auto &child) -> std::pair<size_t, size_t> {
-                       return {child.pos_, child.visits_};
-                     });
+      for (size_t i = 0; i < children_size_; ++i) {
+        const auto &child = children_[i];
+        visits[child.pos_] = child.visits_;
+      }
     }
 
   private:
-    std::vector<Node> children_;
-    Board::board_t moves_;
-    size_t bw_, pos_;
-    Node *parent_;
+    inline constexpr void init(size_t bw, size_t pos, Node *parent) noexcept {
+      bw_ = bw;
+      pos_ = pos;
+      parent_ = parent;
+    }
+
+  private:
+    size_t children_size_ = 0;
+    std::unique_ptr<Node[]> children_{};
+    size_t bw_, pos_ = 81;
+    Node *parent_ = nullptr;
 
   private:
     size_t wins_ = 0, visits_ = 0, rave_wins_ = 10, rave_visits_ = 20;
@@ -114,29 +125,37 @@ public:
     if (!b.has_legal_move(bw)) {
       return 81;
     }
-    size_t total_counts = 0, cbw, cpos;
+    size_t total_counts = 0, cbw = 1 - bw, cpos = 81;
     const auto start_time = hclock::now();
-    Node root(b.get_legal_moves(bw), bw);
+    Node root;
+    root.init_bw(1 - bw);
+    // std::cerr << b.get_legal_moves(bw) << std::endl;
     do {
       Node *node = &root;
       Board board(b);
       // selection
-      while (!node->has_untried_moves() && node->has_children()) {
-        node = node->get_UCT_child(engine_);
-        node->get_move(cbw, cpos);
+      while (node->has_children()) {
+        node = node->select_child(engine_, cbw, cpos);
         board.place(cbw, cpos);
       }
       // expansion
-      if (node->has_untried_moves()) {
-        node->pop_untried_move(engine_, cbw, cpos);
+      if (node->expand(board)) {
+        node = node->select_child(engine_, cbw, cpos);
         board.place(cbw, cpos);
-        node = node->add_child(board.get_legal_moves(cbw), cbw, cpos);
       }
       // simulation
-      size_t winner = rollout(engine_, board, node->get_player());
+      std::array<Board::board_t, 2> rave;
+      while (board.has_legal_move(1 - cbw)) {
+        cbw = 1 - cbw;
+        cpos = board.random_legal_move(cbw, engine_);
+        board.place(cbw, cpos);
+        rave[cbw].set(cpos);
+      }
+      // TODO: board.board_ as rave
+      size_t winner = cbw;
       // backpropogation
       while (node != nullptr) {
-        node->update(winner == node->get_player());
+        node->update(winner, rave);
         node = node->get_parent();
       }
     } while (++total_counts < 10000 ||
@@ -154,17 +173,14 @@ public:
                                           return p1.second < p2.second;
                                         })
                            ->first;
-    return best_move;
-  }
-
-private:
-  template <class PRNG>
-  static size_t rollout(PRNG &rng, Board board, size_t bw) noexcept {
-    while (board.has_legal_move(bw)) {
-      board.place(bw, board.random_legal_move(bw, rng));
-      bw = 1 - bw;
+    for (auto &&[p, n] : visits) {
+      if (n > 1500) {
+        size_t p0 = p % 9, p1 = p / 9;
+        std::cerr << char((p0 >= 8 ? 1 : 0) + p0 + 'A') << char((8 - p1) + '1')
+                  << ' ' << n << std::endl;
+      }
     }
-    return 1 - bw;
+    return best_move;
   }
 
 private:

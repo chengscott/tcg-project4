@@ -29,7 +29,8 @@ struct Position {
     return in;
   }
   friend std::ostream &operator<<(std::ostream &out, const Position &p) {
-    out << char((p.p0 >= 8 ? 1 : 0) + p.p0 + 'A') << char((8 - p.p1) + '1');
+    out << char(static_cast<size_t>(p.p0 >= 8) + p.p0 + 'A')
+        << char((8 - p.p1) + '1');
     return out;
   }
 
@@ -44,6 +45,7 @@ public:
   }
   GTPHelper() {
     std::ios::sync_with_stdio(false);
+    history_.reserve(81);
     register_commands();
   }
   ~GTPHelper() = default;
@@ -127,21 +129,20 @@ private:
     std::string sbw;
     Position pos;
     fin_ >> sbw >> pos;
-    size_t bw = tolower(sbw[0]) == 'w' ? 1 : 0;
+    auto bw = static_cast<size_t>(tolower(sbw[0]) == 'w');
     if (board_.place(bw, static_cast<size_t>(pos))) {
       fout_ << "=\n\n";
+      history_.push_back(board_);
+      gogui_turns_ = !gogui_turns_;
     } else {
       fout_ << "? illegal move\n\n";
-      return;
     }
-    history_.push_back(board_);
-    gogui_turns_ = !gogui_turns_;
   }
   void genmove() {
     std::string sbw;
     fin_ >> sbw;
-    size_t bw = tolower(sbw[0]) == 'w' ? 1 : 0;
-    size_t move = agent_->take_action(board_, bw);
+    auto bw = static_cast<size_t>(tolower(sbw[0]) == 'w');
+    auto move = agent_->take_action(board_, bw);
     if (move < 81) {
       history_.push_back(board_);
       board_.place(bw, move);
