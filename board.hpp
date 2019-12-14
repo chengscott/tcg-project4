@@ -1,4 +1,5 @@
 #pragma once
+#include "dset.hpp"
 #include <array>
 #include <bitset>
 #include <iostream>
@@ -34,23 +35,25 @@ public:
     auto &board = board_[bw].set(p), &board_op = board_[1 - bw];
     forbid.set(p);
     forbid_op.set(p);
-    // check current component
-    check_valid(p, board, board_op, forbid, forbid_op);
-    // check neighbors
-    board_t liberty;
+    // union
+    auto &dset = dset_[bw], &dset_op = dset_[1 - bw];
     const size_t dirlen = dir_len_[p];
     for (size_t i = 0; i < dirlen; ++i) {
       const size_t x = dir_[p][i];
+      if (board.BIT_TEST(x)) {
+        dset.unions(p, x);
+      }
+    }
+    // check current component
+    check_valid(dset, dset.find(p), board, board_op, forbid, forbid_op);
+    // check neighbors
+    for (size_t i = 0; i < dirlen; ++i) {
+      const size_t x = dir_[p][i];
       if (board_op.BIT_TEST(x)) {
-        check_valid(x, board_op, board, forbid_op, forbid);
+        check_valid(dset_op, dset_op.find(x), board_op, board, forbid_op,
+                    forbid);
       } else if (!board.BIT_TEST(x)) {
-        // assert(!board_op.test(x));
-        board_op.set(x);
-        find_liberty(board_op, x, board | board_op, liberty);
-        if (liberty.none()) {
-          forbid_op.set(x);
-        }
-        board_op.reset(x);
+        check_no_liberty(dset_op, x, board_op, board, forbid_op);
       }
     }
     return true;
@@ -93,29 +96,11 @@ public:
   }
 
 private:
-  static void find_liberty(const board_t &board, size_t p,
+  static void find_liberty(const DisjointSet &dset, size_t fp,
                            const board_t &all_board,
                            board_t &liberty) noexcept {
     // find component
-    // assert(board.test(p));
-    board_t component;
-    size_t vstack[81], size = 0, cur;
-    board_t instack;
-    vstack[size++] = p;
-    instack.set(p);
-    while (size > 0) {
-      cur = vstack[--size];
-      component.set(cur);
-      const auto &dir = dir_[cur];
-      size_t dirlen = dir_len_[cur];
-      for (size_t i = 0; i < dirlen; ++i) {
-        const auto &diri = dir[i];
-        if (!instack.BIT_TEST(diri) && board.BIT_TEST(diri)) {
-          vstack[size++] = diri;
-          instack.set(diri);
-        }
-      }
-    }
+    const auto &component = dset.component[fp];
     // find liberty
     liberty =
         ((component << 9) | (component >> 9) | ((component & MASK_RIGHT) << 1) |
@@ -123,26 +108,39 @@ private:
         ~all_board;
   }
 
-  void check_valid(size_t p, board_t &board, board_t &board_op, board_t &forbid,
-                   board_t &forbid_op) noexcept {
+  static void check_valid(const DisjointSet &dset, size_t fp,
+                          const board_t &board, const board_t &board_op,
+                          board_t &forbid, board_t &forbid_op) noexcept {
     board_t liberty;
-    find_liberty(board, p, board | board_op, liberty);
+    find_liberty(dset, fp, board | board_op, liberty);
     if (liberty.count() == 1) {
       const size_t x = liberty._Find_first();
       forbid_op.set(x);
+      check_no_liberty(dset, x, board, board_op, forbid);
+    }
+  }
 
-      // assert(!board.test(x));
-      board.set(x);
-      find_liberty(board, x, board | board_op, liberty);
-      if (liberty.none()) {
-        forbid.set(x);
+  static void check_no_liberty(DisjointSet dset, size_t x, board_t board,
+                               const board_t &board_op,
+                               board_t &forbid) noexcept {
+    board_t liberty;
+    board.set(x);
+    const size_t dirlen = dir_len_[x];
+    for (size_t i = 0; i < dirlen; ++i) {
+      const size_t y = dir_[x][i];
+      if (board.BIT_TEST(y)) {
+        dset.unions(x, y);
       }
-      board.reset(x);
+    }
+    find_liberty(dset, dset.find(x), board | board_op, liberty);
+    if (liberty.none()) {
+      forbid.set(x);
     }
   }
 
 private:
   board_t board_[2], forbid_[2];
+  DisjointSet dset_[2];
   const static constexpr auto dir_ = []() constexpr {
     std::array<std::array<size_t, 4>, 81> ret{};
     for (size_t i = 0; i < 81; ++i) {
