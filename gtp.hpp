@@ -144,9 +144,9 @@ private:
     auto bw = static_cast<size_t>(tolower(sbw[0]) == 'w');
     auto move = agent_->take_action(board_, bw);
     if (move < 81) {
+      fout_ << "= " << Position(move) << "\n\n";
       history_.push_back(board_);
       board_.place(bw, move);
-      fout_ << "= " << Position(move) << "\n\n";
     } else {
       fout_ << "= resign\n\n";
     }

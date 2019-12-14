@@ -49,7 +49,7 @@ private:
       }
       Board::board_t max_children{};
       for (size_t i = 0; i < children_size_; ++i) {
-        if (children_[i].uct_score_ == max_score) {
+        if (std::abs(children_[i].uct_score_ - max_score) < .0001f) {
           max_children.set(i);
         }
       }
@@ -91,11 +91,13 @@ private:
         }
       }
     }
-    void get_children_visits(std::unordered_map<size_t, size_t> &visits) const
-        noexcept {
+    void get_children_visits(std::unordered_map<size_t, size_t> &visits,
+                             size_t threshold = 1500) const noexcept {
       for (size_t i = 0; i < children_size_; ++i) {
         const auto &child = children_[i];
-        visits[child.pos_] = child.visits_;
+        if (child.visits_ > threshold) {
+          visits[child.pos_] = child.visits_;
+        }
       }
     }
 
@@ -129,7 +131,6 @@ public:
     const auto start_time = hclock::now();
     Node root;
     root.init_bw(1 - bw);
-    // std::cerr << b.get_legal_moves(bw) << std::endl;
     do {
       Node *node = &root;
       Board board(b);
@@ -173,13 +174,6 @@ public:
                                           return p1.second < p2.second;
                                         })
                            ->first;
-    for (auto &&[p, n] : visits) {
-      if (n > 1500) {
-        size_t p0 = p % 9, p1 = p / 9;
-        std::cerr << char((p0 >= 8 ? 1 : 0) + p0 + 'A') << char((8 - p1) + '1')
-                  << ' ' << n << std::endl;
-      }
-    }
     return best_move;
   }
 

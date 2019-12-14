@@ -72,7 +72,7 @@ public:
     std::uniform_int_distribution<size_t> choose(0, valid.count() - 1);
     const size_t index = choose(rng);
     size_t action = valid._Find_first();
-    for (size_t i = 1; i < index; ++i) {
+    for (size_t i = 0; i < index; ++i) {
       action = valid._Find_next(action);
     }
     return action;
