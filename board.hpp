@@ -71,8 +71,7 @@ public:
   static size_t random_move_from_board(const board_t &valid,
                                        PRNG &rng) noexcept {
     // assert(valid.any());
-    std::uniform_int_distribution<size_t> choose(0, valid.count() - 1);
-    const size_t index = choose(rng);
+    const size_t index = rng() % valid.count();
     size_t action = valid._Find_first();
     for (size_t i = 0; i < index; ++i) {
       action = valid._Find_next(action);

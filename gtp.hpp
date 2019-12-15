@@ -72,7 +72,7 @@ public:
     return true;
   }
 
-  void registerAgent(std::unique_ptr<Agent> agent) {
+  void registerAgent(std::unique_ptr<MCTSAgent> agent) {
     agent_ = std::move(agent);
   }
 
@@ -245,6 +245,6 @@ private:
   std::map<std::string, std::function<void()>> dispatcher_;
   Board board_;
   std::vector<Board> history_;
-  std::unique_ptr<Agent> agent_;
+  std::unique_ptr<MCTSAgent> agent_;
   bool gogui_turns_ = true;
 };

@@ -1,35 +1,23 @@
 #pragma once
 #include "board.hpp"
+#include "random.hpp"
 #include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <memory>
-#include <random>
 #include <unordered_map>
 
-class Agent {
+class RandomAgent {
 public:
-  Agent() = default;
-  Agent(const Agent &) = default;
-  Agent(Agent &&) noexcept = default;
-  Agent &operator=(const Agent &) = default;
-  Agent &operator=(Agent &&) noexcept = default;
-  virtual ~Agent() = default;
-
-  virtual size_t take_action(const Board &, size_t) = 0;
-};
-
-class RandomAgent final : public Agent {
-public:
-  size_t take_action(const Board &board, size_t bw) override {
+  size_t take_action(const Board &board, size_t bw) {
     return board.random_legal_move(bw, engine_);
   }
 
 private:
-  std::default_random_engine engine_{std::random_device{}()};
+  xorshift engine_{splitmix{}()};
 };
 
-class MCTSAgent final : public Agent {
+class MCTSAgent {
 private:
   class Node {
   public:
@@ -123,7 +111,7 @@ public:
   using hclock = std::chrono::high_resolution_clock;
   const static constexpr auto threshold_time = std::chrono::seconds(1);
 
-  size_t take_action(const Board &b, size_t bw) override {
+  size_t take_action(const Board &b, size_t bw) {
     if (!b.has_legal_move(bw)) {
       return 81;
     }
@@ -178,6 +166,6 @@ public:
   }
 
 private:
-  std::random_device seed_{};
-  std::default_random_engine engine_{seed_()};
+  splitmix seed_{};
+  xorshift engine_{seed_()};
 };
