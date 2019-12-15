@@ -45,13 +45,12 @@ public:
       }
     }
     // check current component
-    check_valid(dset, dset.find(p), board, board_op, forbid, forbid_op);
+    check_valid(dset, p, board, board_op, forbid, forbid_op);
     // check neighbors
     for (size_t i = 0; i < dirlen; ++i) {
       const size_t x = dir_[p][i];
       if (board_op.BIT_TEST(x)) {
-        check_valid(dset_op, dset_op.find(x), board_op, board, forbid_op,
-                    forbid);
+        check_valid(dset_op, x, board_op, board, forbid_op, forbid);
       } else if (!board.BIT_TEST(x)) {
         check_no_liberty(dset_op, x, board_op, board, forbid_op);
       }
@@ -96,23 +95,16 @@ public:
   }
 
 private:
-  static void find_liberty(const DisjointSet &dset, size_t fp,
-                           const board_t &all_board,
-                           board_t &liberty) noexcept {
-    // find component
-    const auto &component = dset.component[fp];
-    // find liberty
-    liberty =
-        ((component << 9) | (component >> 9) | ((component & MASK_RIGHT) << 1) |
-         ((component & MASK_LEFT) >> 1)) &
-        ~all_board;
-  }
-
-  static void check_valid(const DisjointSet &dset, size_t fp,
+  static void check_valid(const DisjointSet &dset, size_t p,
                           const board_t &board, const board_t &board_op,
                           board_t &forbid, board_t &forbid_op) noexcept {
-    board_t liberty;
-    find_liberty(dset, fp, board | board_op, liberty);
+    // find component
+    const auto &component = dset.get_component(p);
+    // find liberty
+    const auto &liberty =
+        ((component << 9) | (component >> 9) | ((component & MASK_RIGHT) << 1) |
+         ((component & MASK_LEFT) >> 1)) &
+        ~(board | board_op);
     if (liberty.count() == 1) {
       const size_t x = liberty._Find_first();
       forbid_op.set(x);
@@ -120,22 +112,28 @@ private:
     }
   }
 
-  static void check_no_liberty(DisjointSet dset, size_t x, board_t board,
+  static void check_no_liberty(const DisjointSet &dset, size_t x, board_t board,
                                const board_t &board_op,
                                board_t &forbid) noexcept {
-    board_t liberty;
     board.set(x);
+    // find component
+    auto component = dset.get_component(x);
     const size_t dirlen = dir_len_[x];
     for (size_t i = 0; i < dirlen; ++i) {
       const size_t y = dir_[x][i];
       if (board.BIT_TEST(y)) {
-        dset.unions(x, y);
+        component |= dset.get_component(y);
       }
     }
-    find_liberty(dset, dset.find(x), board | board_op, liberty);
+    // find liberty
+    const auto &liberty =
+        ((component << 9) | (component >> 9) | ((component & MASK_RIGHT) << 1) |
+         ((component & MASK_LEFT) >> 1)) &
+        ~(board | board_op);
     if (liberty.none()) {
       forbid.set(x);
     }
+    // board.reset(x);
   }
 
 private:
