@@ -63,7 +63,16 @@ public:
   board_t get_legal_moves(size_t bw) const noexcept { return ~forbid_[bw]; }
 
   template <class PRNG>
-  size_t random_legal_move(size_t bw, PRNG &rng) const noexcept {
+  inline size_t random_legal_move(size_t bw, PRNG &rng) const noexcept {
+    return random_move_from_board(~forbid_[bw], rng);
+  }
+
+  template <class PRNG>
+  size_t heuristic_legal_move(size_t bw, PRNG &rng) const noexcept {
+    const auto &both = ~(forbid_[0] | forbid_[1]);
+    if (both.any()) {
+      return random_move_from_board(both, rng);
+    }
     return random_move_from_board(~forbid_[bw], rng);
   }
 

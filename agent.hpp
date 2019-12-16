@@ -136,7 +136,7 @@ public:
       std::array<Board::board_t, 2> rave;
       while (board.has_legal_move(1 - cbw)) {
         cbw = 1 - cbw;
-        cpos = board.random_legal_move(cbw, engine_);
+        cpos = board.heuristic_legal_move(cbw, engine_);
         board.place(cbw, cpos);
         rave[cbw].set(cpos);
       }
