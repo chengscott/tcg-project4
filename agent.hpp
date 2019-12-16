@@ -1,10 +1,10 @@
 #pragma once
 #include "board.hpp"
+#include "memory.hpp"
 #include "random.hpp"
 #include <algorithm>
 #include <chrono>
 #include <cmath>
-#include <memory>
 #include <unordered_map>
 
 class RandomAgent {
@@ -47,7 +47,7 @@ private:
       pos = child.pos_;
       return &child;
     }
-    bool expand(const Board &b) noexcept {
+    bool expand(const Board &b, MemoryManager<Node> &mem) noexcept {
       auto moves(b.get_legal_moves(1 - bw_));
       const size_t size = moves.count();
       if (size == 0) {
@@ -55,7 +55,7 @@ private:
       }
       // expand children
       children_size_ = size;
-      children_ = std::make_unique<Node[]>(size);
+      children_ = mem.allocate(size);
       for (size_t i = 0, pos = moves._Find_first(); i < size;
            ++i, pos = moves._Find_next(pos)) {
         children_[i].init(1 - bw_, pos, this);
@@ -84,7 +84,7 @@ private:
       for (size_t i = 0; i < children_size_; ++i) {
         const auto &child = children_[i];
         if (child.visits_ > threshold) {
-          visits[child.pos_] = child.visits_;
+          visits.emplace(child.pos_, child.visits_);
         }
       }
     }
@@ -98,7 +98,7 @@ private:
 
   private:
     size_t children_size_ = 0;
-    std::unique_ptr<Node[]> children_{};
+    Node *children_;
     size_t bw_, pos_ = 81;
     Node *parent_ = nullptr;
 
@@ -128,7 +128,7 @@ public:
         board.place(cbw, cpos);
       }
       // expansion
-      if (node->expand(board)) {
+      if (node->expand(board, mem_)) {
         node = node->select_child(engine_, cbw, cpos);
         board.place(cbw, cpos);
       }
@@ -162,10 +162,13 @@ public:
                                           return p1.second < p2.second;
                                         })
                            ->first;
+
+    mem_.destroy();
     return best_move;
   }
 
 private:
+  MemoryManager<Node> mem_;
   splitmix seed_{};
   xorshift engine_{seed_()};
 };
