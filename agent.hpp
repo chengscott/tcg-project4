@@ -1,10 +1,10 @@
 #pragma once
 #include "board.hpp"
-#include "memory.hpp"
 #include "random.hpp"
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <memory>
 #include <unordered_map>
 
 class RandomAgent {
@@ -26,18 +26,18 @@ private:
     constexpr bool has_children() const noexcept { return children_size_ > 0; }
     template <class PRNG>
     Node *select_child(PRNG &rng, size_t &bw, size_t &pos) {
-      float max_score = -1;
+      float max_score = -1.f;
       for (size_t i = 0; i < children_size_; ++i) {
         auto &child = children_[i];
         const float score = (child.rave_wins_ + child.wins_ +
                              std::sqrt(log_visits_ * child.visits_) * 0.25f) /
                             (child.rave_visits_ + child.visits_);
         child.uct_score_ = score;
-        max_score = std::max(score, max_score);
+        max_score = (score - max_score > 0.0001f) ? score : max_score;
       }
       Board::board_t max_children{};
       for (size_t i = 0; i < children_size_; ++i) {
-        if (std::abs(children_[i].uct_score_ - max_score) < .0001f) {
+        if ((children_[i].uct_score_ - max_score) > -0.0001f) {
           max_children.set(i);
         }
       }
@@ -47,15 +47,19 @@ private:
       pos = child.pos_;
       return &child;
     }
-    bool expand(const Board &b, MemoryManager<Node> &mem) noexcept {
+    bool expand(const Board &b) noexcept {
+      if (visits_ == 0 || is_leaf_) {
+        return false;
+      }
       auto moves(b.get_legal_moves(1 - bw_));
       const size_t size = moves.count();
       if (size == 0) {
+        is_leaf_ = true;
         return false;
       }
       // expand children
       children_size_ = size;
-      children_ = mem.allocate(size);
+      children_ = std::make_unique<Node[]>(size);
       for (size_t i = 0, pos = moves._Find_first(); i < size;
            ++i, pos = moves._Find_next(pos)) {
         children_[i].init(1 - bw_, pos, this);
@@ -79,11 +83,11 @@ private:
         }
       }
     }
-    void get_children_visits(std::unordered_map<size_t, size_t> &visits,
-                             size_t threshold = 1500) const noexcept {
+    void get_children_visits(std::unordered_map<size_t, size_t> &visits) const
+        noexcept {
       for (size_t i = 0; i < children_size_; ++i) {
         const auto &child = children_[i];
-        if (child.visits_ > threshold) {
+        if (child.visits_ > 0) {
           visits.emplace(child.pos_, child.visits_);
         }
       }
@@ -98,8 +102,9 @@ private:
 
   private:
     size_t children_size_ = 0;
-    Node *children_;
+    std::unique_ptr<Node[]> children_;
     size_t bw_, pos_ = 81;
+    bool is_leaf_ = false;
     Node *parent_ = nullptr;
 
   private:
@@ -123,31 +128,36 @@ public:
       Node *node = &root;
       Board board(b);
       // selection
+      std::array<Board::board_t, 2> rave;
       while (node->has_children()) {
         node = node->select_child(engine_, cbw, cpos);
         board.place(cbw, cpos);
+        rave[cbw].set(cpos);
       }
       // expansion
-      if (node->expand(board, mem_)) {
+      if (node->expand(board)) {
         node = node->select_child(engine_, cbw, cpos);
-        board.place(cbw, cpos);
-      }
-      // simulation
-      std::array<Board::board_t, 2> rave;
-      while (board.has_legal_move(1 - cbw)) {
-        cbw = 1 - cbw;
-        cpos = board.heuristic_legal_move(cbw, engine_);
         board.place(cbw, cpos);
         rave[cbw].set(cpos);
       }
-      // TODO: board.board_ as rave
+      // simulation
+      const auto init_two_go = board.get_two_go();
+      bool is_two_go;
+      while (board.has_legal_move(1 - cbw)) {
+        cbw = 1 - cbw;
+        cpos = board.heuristic_legal_move(cbw, init_two_go, is_two_go, engine_);
+        board.place(cbw, cpos);
+        if (is_two_go) {
+          rave[cbw].set(cpos);
+        }
+      }
       size_t winner = cbw;
       // backpropogation
       while (node != nullptr) {
         node->update(winner, rave);
         node = node->get_parent();
       }
-    } while (++total_counts < 10000 ||
+    } while (++total_counts < 50000 ||
              (hclock::now() - start_time) < threshold_time);
     const auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(
                               hclock::now() - start_time)
@@ -163,12 +173,10 @@ public:
                                         })
                            ->first;
 
-    mem_.destroy();
     return best_move;
   }
 
 private:
-  MemoryManager<Node> mem_;
   splitmix seed_{};
   xorshift engine_{seed_()};
 };

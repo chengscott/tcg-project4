@@ -4,7 +4,7 @@ CXXFLAGS += -Wall -Wextra -Wshadow -Wnon-virtual-dtor -Wpedantic
 CXXFLAGS += -Wunused -Wsign-conversion -Wdouble-promotion
 BIN = nogo
 SRCS = nogo.cpp
-DEPS = gtp.hpp board.hpp agent.hpp random.hpp memory.hpp
+DEPS = gtp.hpp board.hpp agent.hpp random.hpp
 OBJS = $(SRCS:.cpp=)
 OBJS += $(DEPS:.hpp=)
 CHECKS = -checks=bugprone-*,clang-analyzer-*,modernize-*,performance-*,readability-*
