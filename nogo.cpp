@@ -3,7 +3,7 @@
 
 int main(int /*argc*/, char ** /*argv*/) {
   auto &gtp = GTPHelper::getInstance();
-  gtp.registerAgent(std::make_unique<MCTSAgent>());
+  gtp.registerAgent();
   while (gtp.execute()) {
     ;
   }
